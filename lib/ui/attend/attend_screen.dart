@@ -16,7 +16,7 @@ class AttendScreen extends StatefulWidget {
   const AttendScreen({super.key, this.image});
 
   @override
-  State<AttendScreen> createState() => _AttendScreenState(this.image);
+  State<AttendScreen> createState() => _AttendScreenState();
 }
 
 class _AttendScreenState extends State<AttendScreen> {
@@ -24,243 +24,516 @@ class _AttendScreenState extends State<AttendScreen> {
   String strTime = "";
   String strDateTime = "";
   String strStatus = "Attend";
-  String strAddress = "";
+  String strAddress = "Fetching your location...";
   double dLat = 0.0;
   double dLong = 0.0;
   int dateHours = 0;
   int dateMinutes = 0;
-  bool isLoading = false;
+  bool isLoading = true;
   XFile? image;
   final controllerName = TextEditingController();
   final CollectionReference dataCollection =
   FirebaseFirestore.instance.collection('absensija');
 
-  _AttendScreenState(XFile? image);
-
   @override
   void initState() {
+    super.initState();
+    image = widget.image;
     setStatusAbsen();
     setDateTime();
-    handleLocationPermition();
-    super.initState();
+
+    // Delay location permission check to avoid build-time errors
+    Future.delayed(Duration.zero, () {
+      _initializeLocation();
+    });
+  }
+
+  Future<void> _initializeLocation() async {
+    try {
+      bool success = await handleLocationPermition();
+      if (success) {
+        await getGeoLocationPosition();
+      } else {
+        setState(() {
+          isLoading = false;
+          strAddress = "Unable to access location. Please check permissions.";
+        });
+      }
+    } catch (e) {
+      setState(() {
+        isLoading = false;
+        strAddress = "Error initializing location: ${e.toString()}";
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     Size size = MediaQuery.of(context).size;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.blueAccent,
+        backgroundColor: const Color(0xFF4361EE),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text(
-          "Attendance Menu",
+          "Attendance Check-in",
           style: TextStyle(
-              fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white
+          ),
+        ),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+            bottomLeft: Radius.circular(20),
+            bottomRight: Radius.circular(20),
+          ),
         ),
       ),
       body: SingleChildScrollView(
-        child: Card(
-          color: Colors.white,
-          margin: const EdgeInsets.fromLTRB(10, 10, 10, 30),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          elevation: 5,
+        physics: const BouncingScrollPhysics(),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header Card
               Container(
-                height: 50,
-                decoration: const BoxDecoration(
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(10),
-                    topRight: Radius.circular(10),
+                margin: const EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4361EE), Color(0xFF3A0CA3)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  color: Colors.blueAccent,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF4361EE).withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                child: const Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(width: 12),
-                    Icon(Icons.face_retouching_natural_outlined,
-                        color: Colors.white),
-                    SizedBox(width: 12),
-                    Text(
-                      "Please make a selfie photo!",
-                      style: TextStyle(
-                          fontSize: 18,
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.face,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Time to Check In',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                strDateTime,
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.9),
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _getStatusColor().withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: _getStatusColor(),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        'Status: $strStatus',
+                        style: TextStyle(
+                          color: _getStatusColor(),
                           fontWeight: FontWeight.bold,
-                          color: Colors.white),
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(10, 20, 0, 20),
-                child: Text(
-                  "Capture Photo",
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black),
-                ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const CameraScreen()),
-                  );
-                },
-                child: Container(
-                  margin: const EdgeInsets.fromLTRB(10, 0, 10, 20),
-                  width: size.width,
-                  height: 150,
-                  child: DottedBorder(
-                    radius: const Radius.circular(10),
-                    borderType: BorderType.RRect,
-                    color: Colors.blueAccent,
-                    strokeWidth: 1,
-                    dashPattern: const [5, 5],
-                    child: SizedBox.expand(
-                      child: FittedBox(
-                        child: image != null
-                            ? Image.file(File(image!.path), fit: BoxFit.cover)
-                            : const Icon(
-                          Icons.camera_enhance_outlined,
-                          color: Colors.blueAccent,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(10),
-                child: TextField(
-                  textInputAction: TextInputAction.done,
-                  controller: controllerName,
-                  keyboardType: TextInputType.text,
-                  decoration: InputDecoration(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                    labelText: "Your Name",
-                    hintText: "Please enter your name",
-                    hintStyle:
-                    const TextStyle(fontSize: 14, color: Colors.grey),
-                    labelStyle:
-                    const TextStyle(fontSize: 14, color: Colors.black),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Colors.blueAccent),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Colors.blueAccent),
-                    ),
-                  ),
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(10, 10, 10, 10),
-                child: Text(
-                  "Your Location",
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(10),
-                child: SizedBox(
-                  height: 120,
-                  child: TextField(
-                    enabled: false,
-                    maxLines: 5,
-                    decoration: InputDecoration(
-                      alignLabelWithHint: true,
-                      disabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Colors.blueAccent),
-                      ),
-                      hintText: 'Your Location',
-                      hintStyle:
-                      const TextStyle(fontSize: 14, color: Colors.grey),
-                      fillColor: Colors.transparent,
-                      filled: true,
-                    ),
-                  ),
-                ),
-              ),
-              isLoading
-                  ? const Center(
-                child: CircularProgressIndicator(
-                  color: Colors.blueAccent,
-                ),
-              )
-                  : Container(),
+
+              // Photo Capture Section
               Container(
-                alignment: Alignment.center,
-                margin: const EdgeInsets.all(30),
-                child: Material(
-                  elevation: 3,
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    width: size.width,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      color: Colors.white,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
                     ),
-                    child: Material(
-                      borderRadius: BorderRadius.circular(20),
-                      color: Colors.blueAccent,
-                      child: InkWell(
-                        splashColor: Colors.blue,
-                        borderRadius: BorderRadius.circular(20),
-                        onTap: () {
-                          if (image == null || controllerName.text.isEmpty) {
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(const SnackBar(
-                              content: Row(
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.camera_alt_rounded,
+                          color: Color(0xFF4361EE),
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Take a Selfie',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF212529),
+                          ),
+                        ),
+                        const Spacer(),
+                        if (image != null)
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                image = null;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.red.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.refresh,
+                                color: Colors.redAccent,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const CameraScreen(),
+                          ),
+                        ).then((result) {
+                          if (result != null && result is XFile) {
+                            setState(() {
+                              image = result;
+                            });
+                          }
+                        });
+                      },
+                      child: Container(
+                        width: size.width,
+                        height: 200,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8F9FA),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: DottedBorder(
+                            radius: const Radius.circular(12),
+                            borderType: BorderType.RRect,
+                            color: const Color(0xFF4361EE),
+                            strokeWidth: 2,
+                            dashPattern: const [6, 4],
+                            child: Center(
+                              child: image != null
+                                  ? Stack(
+                                fit: StackFit.expand,
                                 children: [
-                                  Icon(
-                                    Icons.info_outline,
-                                    color: Colors.white,
+                                  Image.file(
+                                    File(image!.path),
+                                    fit: BoxFit.cover,
                                   ),
-                                  SizedBox(
-                                    width: 10,
+                                  Positioned(
+                                    right: 12,
+                                    bottom: 12,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.6),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Icon(
+                                        Icons.check_circle,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                    ),
                                   ),
-                                  Text(
-                                    'Please complete your report first',
-                                    style: TextStyle(color: Colors.white),
-                                  )
+                                ],
+                              )
+                                  : Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF4361EE).withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.camera_alt_rounded,
+                                      color: Color(0xFF4361EE),
+                                      size: 40,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  const Text(
+                                    'Tap to take a photo',
+                                    style: TextStyle(
+                                      color: Color(0xFF4361EE),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
                                 ],
                               ),
-                              backgroundColor: Colors.blueGrey,
-                              shape: StadiumBorder(),
-                              behavior: SnackBarBehavior.floating,
-                            ));
-                          } else {
-                            submitAbsen(strAddress,
-                                controllerName.text.toString(), strStatus);
-                          }
-                        },
-                        child: const Center(
-                          child: Text(
-                            "Report Now",
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
                       ),
                     ),
+                    const SizedBox(height: 20),
+
+                    // Name Field
+                    const Text(
+                      'Your Name',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF212529),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: controllerName,
+                      keyboardType: TextInputType.text,
+                      textCapitalization: TextCapitalization.words,
+                      textInputAction: TextInputAction.next,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Color(0xFF212529),
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Enter your full name',
+                        hintStyle: TextStyle(
+                          color: Colors.grey.shade400,
+                          fontSize: 16,
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.person_outline_rounded,
+                          color: Color(0xFF4361EE),
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFF8F9FA),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Location Section
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.location_on,
+                          color: Color(0xFF4361EE),
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Your Location',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF212529),
+                          ),
+                        ),
+                        const Spacer(),
+                        if (!isLoading && strAddress != "Fetching your location...")
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                isLoading = true;
+                                strAddress = "Fetching your location...";
+                              });
+                              getGeoLocationPosition();
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF4361EE).withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.refresh,
+                                color: Color(0xFF4361EE),
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8F9FA),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.pin_drop,
+                            color: Color(0xFF4361EE),
+                            size: 24,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: isLoading
+                                ? Row(
+                              children: [
+                                const SizedBox(
+                                  height: 16,
+                                  width: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4361EE)),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  strAddress,
+                                  style: const TextStyle(
+                                    color: Color(0xFF6C757D),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            )
+                                : Text(
+                              strAddress,
+                              style: const TextStyle(
+                                color: Color(0xFF212529),
+                                fontSize: 14,
+                                height: 1.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 32),
+
+              // Submit Button
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (image == null || controllerName.text.isEmpty) {
+                      showErrorSnackBar(context, image == null
+                          ? 'Please take a selfie photo'
+                          : 'Please enter your name');
+                    } else {
+                      submitAbsen(strAddress, controllerName.text.toString(), strStatus);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4361EE),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 2,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.check_circle_outline_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Check In Now',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -271,89 +544,252 @@ class _AttendScreenState extends State<AttendScreen> {
     );
   }
 
-  Future<bool> handleLocationPermition() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [
-              Icon(
-                Icons.location_off,
-                color: Colors.white,
-              ),
-              SizedBox(
-                width: 10,
-              ),
-              Text(
-                'Please enable location service',
-                style: TextStyle(color: Colors.white),
-              )
-            ],
-          ),
-          backgroundColor: Colors.blueGrey,
-          shape: StadiumBorder(),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return false;
+  Color _getStatusColor() {
+    switch (strStatus) {
+      case "Masuk":
+        return Colors.green;
+      case "Telat":
+        return Colors.orange;
+      case "Absent":
+        return Colors.red;
+      default:
+        return Colors.white;
     }
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
+  }
+
+  void showErrorSnackBar(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.info_outline_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF4361EE),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        margin: const EdgeInsets.all(16),
+        elevation: 4,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Future<bool> handleLocationPermition() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.location_off, color: Colors.white),
+                  SizedBox(width: 10),
+                  Text('Please enable location services on your device'),
+                ],
+              ),
+              backgroundColor: const Color(0xFF4361EE),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              margin: const EdgeInsets.all(16),
+            ),
+          );
+        }
         return false;
       }
-    }
-    if (permission == LocationPermission.deniedForever) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [
-              Icon(
-                Icons.location_off,
-                color: Colors.white,
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    Icon(Icons.location_off, color: Colors.white),
+                    SizedBox(width: 10),
+                    Text('Location permission denied'),
+                  ],
+                ),
+                backgroundColor: const Color(0xFF4361EE),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                margin: const EdgeInsets.all(16),
               ),
-              SizedBox(
-                width: 10,
+            );
+          }
+          return false;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.location_off, color: Colors.white),
+                  SizedBox(width: 10),
+                  Text('Location permissions are permanently denied, please enable in settings'),
+                ],
               ),
-              Text(
-                'Please enable location service',
-                style: TextStyle(color: Colors.white),
-              )
-            ],
+              backgroundColor: const Color(0xFF4361EE),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              margin: const EdgeInsets.all(16),
+            ),
+          );
+        }
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error, color: Colors.white),
+                SizedBox(width: 10),
+                Expanded(child: Text('Error checking location permissions: ${e.toString()}')),
+              ],
+            ),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
           ),
-          backgroundColor: Colors.blueGrey,
-          shape: StadiumBorder(),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+        );
+      }
       return false;
     }
-    return true;
   }
 
   Future<void> getGeoLocationPosition() async {
-    //ignore: deprecated_member_use
-    Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.low);
-    setState(() {
-      isLoading = false;
-      getAddressFromLongLat(position);
-    });
+    if (!mounted) return;
+
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 15));
+
+      if (mounted) {
+        setState(() {
+          dLat = position.latitude;
+          dLong = position.longitude;
+        });
+        await getAddressFromLongLat(position);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+          strAddress = "Location unavailable. Please try again.";
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.white),
+                SizedBox(width: 10),
+                Expanded(child: Text('Error getting location: ${e.toString()}')),
+              ],
+            ),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> getAddressFromLongLat(Position position) async {
-    List<Placemark> placemarks =
-    await placemarkFromCoordinates(position.latitude, position.longitude);
-    print(placemarks);
-    Placemark place = placemarks[0];
-    setState(() {
-      dLat = position.latitude;
-      dLong = position.longitude;
-      strAddress =
-      '${place.street}, ${place.subLocality}, ${place.locality}, ${place.administrativeArea}, ${place.postalCode}, ${place.country}';
-    });
+    if (!mounted) return;
+
+    try {
+      List<Placemark> placemarks =
+      await placemarkFromCoordinates(position.latitude, position.longitude);
+
+      if (!mounted) return;
+
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks[0];
+
+        // Build address parts, filtering out empty or null values
+        List<String?> addressParts = [
+          place.street,
+          place.subLocality,
+          place.locality,
+          place.administrativeArea,
+          place.postalCode,
+          place.country
+        ].where((part) => part != null && part.isNotEmpty).toList();
+
+        setState(() {
+          isLoading = false;
+          // Join with commas only the non-empty parts
+          strAddress = addressParts.join(', ');
+
+          // If the address is somehow empty after filtering
+          if (strAddress.isEmpty) {
+            strAddress = "Location found at: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}";
+          }
+        });
+      } else {
+        setState(() {
+          isLoading = false;
+          strAddress = "Location found at: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}";
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+          strAddress = "Found your location, but couldn't get the address details";
+        });
+
+        print("Error in getAddressFromLongLat: ${e.toString()}");
+      }
+    }
   }
 
   void setDateTime() async {
@@ -370,10 +806,16 @@ class _AttendScreenState extends State<AttendScreen> {
       dateHours = int.parse(dateHour.format(dateNow));
       dateMinutes = int.parse(dateMinute.format(dateNow));
     });
+
+    setStatusAbsen();
   }
 
   void setStatusAbsen() {
-    if (dateHours < 8 || dateHours == 8 && dateMinutes <= 30) {
+    DateTime now = DateTime.now();
+    dateHours = now.hour;
+    dateMinutes = now.minute;
+
+    if (dateHours < 8 || (dateHours == 8 && dateMinutes <= 30)) {
       strStatus = "Masuk";
     } else if ((dateHours > 8 && dateHours < 18) ||
         (dateHours == 18 && dateMinutes <= 31)) {
@@ -384,25 +826,53 @@ class _AttendScreenState extends State<AttendScreen> {
   }
 
   showLoaderDialog(BuildContext context) {
-    AlertDialog alert = AlertDialog(
-      content: new Row(
-        children: [
-          const CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.blueGrey),
-          ),
-          Container(
-            margin: const EdgeInsets.only(left: 7),
-            child: const Text("Checking..."),
-          ),
-        ],
-      ),
-    );
     showDialog(
-        barrierDismissible: false,
-        context: context,
-        builder: (BuildContext context) {
-          return alert;
-        });
+      barrierDismissible: false,
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4361EE)),
+                  strokeWidth: 3,
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Submitting Attendance",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF212529),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "Please wait...",
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> submitAbsen(String address, String name, String status) async {
@@ -413,73 +883,136 @@ class _AttendScreenState extends State<AttendScreen> {
       'status': status,
       'dateTime': strDateTime,
     }).then((result) {
-      setState(() {
-        try {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.check_circle_outline, color: Colors.white),
-                  Text(
-                    'Absen Berhasil',
+      Navigator.of(context).pop(); // Dismiss the loading dialog
+
+      try {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ],
-              ),
-              backgroundColor: Colors.orangeAccent,
-              shape: StadiumBorder(),
-              behavior: SnackBarBehavior.floating,
+                  child: const Icon(
+                    Icons.check_circle_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Attendance submitted successfully!',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          );
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+            elevation: 4,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        Future.delayed(const Duration(seconds: 1), () {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (context) => const HomeScreen(),
             ),
           );
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(
-                    Icons.info_outline,
-                    color: Colors.white,
+        });
+
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  Expanded(
-                    child: Text(
-                      'Ups $e',
-                      style: const TextStyle(color: Colors.white),
+                  child: const Icon(
+                    Icons.error_outline_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Error: ${e.toString()}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
                     ),
                   ),
-                ],
-              ),
-              backgroundColor: Colors.orangeAccent,
-              shape: StadiumBorder(),
-              behavior: SnackBarBehavior.floating,
+                ),
+              ],
             ),
-          );
-        }
-      });
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+            elevation: 4,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }).catchError((error) {
+      Navigator.of(context).pop(); // Dismiss the loading dialog
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
-              const Icon(
-                Icons.info_outline,
-                color: Colors.white,
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.error_outline_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
               ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Walah $error',
-                  style: const TextStyle(color: Colors.white),
+                  'Error: ${error.toString()}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ],
           ),
-          backgroundColor: Colors.orangeAccent,
-          shape: StadiumBorder(),
+          backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
+          elevation: 4,
+          duration: const Duration(seconds: 3),
         ),
       );
     });
